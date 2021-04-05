@@ -48,6 +48,8 @@ from utils.debugger import debug
 from utils.logger import log
 from utils.selenium_utils import options, enable_headless
 
+import twitter
+
 # Optional OFFER_URL is:     "OFFER_URL": "https://{domain}/dp/",
 AMAZON_URLS = {
     "BASE_URL": "https://{domain}/",
@@ -59,6 +61,7 @@ AMAZON_URLS = {
 CHECKOUT_URL = "https://{domain}/gp/cart/desktop/go-to-checkout.html/ref=ox_sc_proceed?partialCheckoutCart=1&isToBeGiftWrappedBefore=0&proceedToRetailCheckout=Proceed+to+checkout&proceedToCheckout=1&cartInitiateId={cart_id}"
 
 AUTOBUY_CONFIG_PATH = "config/amazon_config.json"
+PREEMPTION_CONFIG_PATH = "config/preemption.json"
 
 BUTTON_XPATHS = [
     '//input[@name="placeYourOrder1"]',
@@ -110,6 +113,7 @@ class Amazon:
         shipping_bypass=False,
         alt_offers=False,
         wait_on_captcha_fail=False,
+        preemption="",
     ):
         self.notification_handler = notification_handler
         self.asin_list = []
@@ -168,6 +172,27 @@ class Amazon:
             except:
                 raise
 
+        if os.path.exists(PREEMPTION_CONFIG_PATH) and preemption == "Twitter":
+            with open(PREEMPTION_CONFIG_PATH) as json_file:
+                try:
+                    config = json.load(json_file)
+                    consumer_key = config["Authentication"]["Key"]
+                    consumer_secret = config["Authentication"]["Secret"]
+                    bearer_token = config["Authentication"]["BearerToken"]
+                    access_token_key = config["Authentication"]["AccessToken"]
+                    access_token_secret = config["Authentication"]["AccessTokenSecret"]
+                    channel = config["Channel"]
+                    self.notifier = TwitterNotifier(
+                        consumer_key,
+                        consumer_secret,
+                        access_token_key,
+                        access_token_secret,
+                        channel,
+                    )
+                except Exception as e:
+                    log.error(str(e))
+                    exit(0)
+
         if os.path.exists(AUTOBUY_CONFIG_PATH):
             with open(AUTOBUY_CONFIG_PATH) as json_file:
                 try:
@@ -176,11 +201,12 @@ class Amazon:
                     self.amazon_website = config.get(
                         "amazon_website", "smile.amazon.com"
                     )
-                    for x in range(self.asin_groups):
-                        self.asin_list.append(config[f"asin_list_{x + 1}"])
-                        self.reserve_min.append(float(config[f"reserve_min_{x + 1}"]))
-                        self.reserve_max.append(float(config[f"reserve_max_{x + 1}"]))
-                    # assert isinstance(self.asin_list, list)
+                    if not preemption:
+                        for x in range(self.asin_groups):
+                            self.asin_list.append(config[f"asin_list_{x + 1}"])
+                            self.reserve_min.append(float(config[f"reserve_min_{x + 1}"]))
+                            self.reserve_max.append(float(config[f"reserve_max_{x + 1}"]))
+                        # assert isinstance(self.asin_list, list)
                 except Exception as e:
                     log.error(f"{e} is missing")
                     log.error(
@@ -192,6 +218,7 @@ class Amazon:
                 "No config file found, see here on how to fix this: https://github.com/Hari-Nagarajan/fairgame/wiki/Usage#json-configuration"
             )
             exit(0)
+
 
         if not self.create_driver(self.profile_path):
             exit(1)
@@ -251,6 +278,7 @@ class Amazon:
 
         while continue_stock_check:
             self.unknown_title_notification_sent = False
+            self.asin_list, self.reserve_min, self.reserve_max = self.notifier.build_asin_list()
             asin = self.run_asins(delay)
             # found something in stock and under reserve
             # initialize loop limiter variables
@@ -1941,6 +1969,39 @@ class AmazonItemCondition(Enum):
             except KeyError:
                 raise NotImplementedError
 
+class TwitterNotifier():
+    def __init__(
+        self,
+        consumer_key,
+        consumer_secret,
+        access_token_key,
+        access_token_secret,
+        channel,
+        shelf_life=600,
+    ):
+        self.handle = twitter.Api(
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            access_token_key=access_token_key,
+            access_token_secret=access_token_secret,
+        )
+        self.shelf_life = shelf_life
+        self.channel = channel
+
+    def build_asin_list(self):
+        timeline = self.handle.GetUserTimeline(screen_name=self.channel)
+        asin_set = set()
+        reserve_min = []
+        reserve_max = []
+        for status in timeline:
+            if "IN STOCK AT AMAZON" in status.text:
+                asin = status.urls[0].expanded_url.split("/")[-1]
+                asin_set.add(asin)
+                pricing_info = status.text.split("\n")[1]
+                price = float(pricing_info[pricing_info.find("$") + 1:])
+                reserve_min.append(price - 10)
+                reserve_max.append(price + 10)
+        return [[asin] for asin in asin_set], reserve_min, reserve_max
 
 def get_item_condition(form_action) -> AmazonItemCondition:
     """ Attempts to determine the Item Condition from the Add To Cart form action """

@@ -36,6 +36,7 @@ packaging = "*"
 config = "*"
 lxml = "*"
 dnspython = "*"
+python-twitter="*"
 
 [requires]
 python_version = "3.8"

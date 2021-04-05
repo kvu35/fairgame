@@ -1,0 +1,12 @@
+{
+    "Publisher" : "Twitter",
+    "Authentication": {
+        "Key": "NiL2QEzdSvL0RsHJJQwNIe2xV",
+        "Secret": "HNiccGbyvgCXUuKEw2qmwwlo6aIDhdFnEd6Py8ta3YQJmlIJ3I",
+        "BearerToken": "AAAAAAAAAAAAAAAAAAAAAPb3OAEAAAAAAqdMNPlKUFqyW0hBCDFScDRE%2BlM%3DEwiZ0kBkSrsF9hQyWqmIrXxLn7kWGlSY7ucZEudSJRgCd3wQTh",
+        "AccessToken": "1378162454178504710-JkuPyjGLTayBf60nMAKTWWmK5HpTvZ",
+        "AccessTokenSecret": "Jtce0PLVoFYU1T69CxIjr6VJhlQo40wIfeZ7CV8utlLqX"
+    },
+    "Channel": "@ns_alerts",
+    "Algorithm": "greedy"
+}
